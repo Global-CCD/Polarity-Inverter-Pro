@@ -32,3 +32,69 @@ A production-ready, PWA-compatible single-page web application for real-time aud
    
    # Or use npx
    npx serve .
+   ```
+3. On your smartphone, open the served URL
+4. Tap **"Add to Home Screen"** in your browser menu for optimal background performance
+5. Tap **Start Monitoring** and grant microphone permission
+
+### Recommended Setup for Background Use
+- **iOS Safari**: Install to Home Screen first. If audio stops when locking the screen, ensure "Silent Mode" is off and start the app from the home screen icon rather than the browser tab.
+- **Android Chrome**: Install to Home Screen. Audio routing to Bluetooth is handled automatically by the OS; use the volume panel to confirm the active output device.
+- **Wake Lock**: The app automatically requests a screen wake lock when monitoring starts to prevent sleep-induced audio suspension.
+
+## Technical Architecture
+
+### Audio Processing Graph
+```
+MediaStreamSource → InputGain → HighPassFilter(80Hz) → InverterGain(±1) 
+→ Compressor(AGC) → Limiter(-1dB) → OutputGain → Analyser → Destination
+```
+
+### AGC Guard Algorithm
+The feedback detector maintains a rolling 200ms history of output RMS levels. When any of the following conditions are met, the output gain is ducked exponentially to 5%:
+
+- **Sustained High**: All samples in the 200ms window exceed the AGC threshold minus 6 dB
+- **Extreme Peak**: Instantaneous level exceeds -6 dBFS
+
+Recovery occurs automatically when levels drop 12 dB below the threshold for a sustained period. Attack is immediate; release follows a slow 50ms exponential envelope to prevent pumping.
+
+### Bluetooth Detection
+On browsers supporting `navigator.mediaDevices.enumerateDevices()` and `AudioContext.setSinkId()`, the app polls for audio output devices containing "bluetooth" in their label and surfaces this in the UI. On iOS, audio routing is managed exclusively via Control Center.
+
+## Browser Support
+
+| Feature | Chrome/Edge | Safari iOS | Firefox | Samsung Internet |
+|---------|-------------|------------|---------|------------------|
+| Microphone Access | ✅ | ✅ | ✅ | ✅ |
+| Web Audio API | ✅ | ✅ | ✅ | ✅ |
+| Wake Lock API | ✅ | ✅ | ❌ | ✅ |
+| Bluetooth Detection | ✅ (Android) | ❌ | ❌ | ✅ |
+| Background Audio | ✅* | ✅** | ✅* | ✅* |
+
+\* Requires "Add to Home Screen" or tab persistence  
+\*\* Requires Home Screen installation and non-Silent Mode
+
+## File Structure
+
+```
+/
+├── index.html          # Complete single-file application (HTML + CSS + JS)
+└── README.md           # This file
+```
+
+The entire application is intentionally contained in a single HTML file for portability, easy hosting on static platforms (Cloudflare Pages, GitHub Pages, Netlify), and offline caching.
+
+## Privacy & Security
+
+- No external network requests are made after initial page load
+- No audio is recorded to disk, uploaded, or transmitted
+- Microphone access is requested via standard browser permission prompts and can be revoked at any time via browser settings
+- The app functions entirely within the browser's secure sandbox
+
+## License
+
+MIT License — Free for personal and commercial use.
+
+---
+
+**Disclaimer**: This tool is intended for acoustic testing, audio engineering workflows, and hearing assistance scenarios. Users are responsible for complying with local laws regarding audio monitoring and recording. Always verify your output volume before enabling polarity inversion to prevent equipment damage or hearing injury.
