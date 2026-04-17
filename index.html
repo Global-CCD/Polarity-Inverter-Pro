@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0B0F19">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Polarity Inverter Pro</title>
+    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiUG9sYXJpdHkgSW52ZXJ0ZXIgUHJvIiwic2hvcnRfbmFtZSI6IkludlBvbGFyaXR5Iiwic3RhcnRfdXJsIjoiLiIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiMwQjBGMTkiLCJ0aGVtZV9jb2xvciI6IiMwQjBGMTkiLCJpY29ucyI6W3sic3JjIjoiZGF0YTppbWFnZS9zdmcreG1sLCUzQ3N2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxOTIgMTkyJyUzRSUzQ3JlY3Qgd2lkdGg9JzE5MicgaGVpZ2h0PScxOTInIHJ4PSczMicgZmlsbD0nIzBCMEYxOScvJTNFJTNDdGV4dCB4PSc5NicgeT0nMTIwJyBmb250LXNpemU9JzgwJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJyBmaWxsPSd3aGl0ZSclM0XinJYlM0MvdGV4dCUzRSUzQy9zdmclM0UiLCJzaXplcyI6IjE5MngxOTIifV19">
+    <style>
+        :root {
+            --bg: #0B0F19;
+            --surface: #151B2B;
+            --surface-hover: #1E2640;
+            --primary: #00D4AA;
+            --primary-dim: #00A884;
+            --danger: #FF4757;
+            --warning: #FFA502;
+            --text: #E2E8F0;
+            --text-dim: #94A3B8;
+            --border: rgba(255,255,255,0.08);
+            --shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.5;
+            overflow-x: hidden;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Animated background mesh */
+        .bg-mesh {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(0,212,170,0.08) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(0,120,255,0.05) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        header {
+            padding: 24px 20px 16px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            background: rgba(11,15,25,0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, var(--text), var(--primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        main {
+            flex: 1;
+            padding: 20px;
+            max-width: 480px;
+            margin: 0 auto;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding-bottom: 40px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:active {
+            transform: scale(0.995);
+        }
+
+        .main-control {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            align-items: center;
+            text-align: center;
+        }
+
+        #startBtn {
+            width: 100%;
+            padding: 18px;
+            border: none;
+            border-radius: 16px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #fff;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dim));
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(0,212,170,0.3);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #startBtn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, transparent, rgba(255,255,255,0.2), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s;
+        }
+
+        #startBtn:hover::after {
+            transform: translateX(100%);
+        }
+
+        #startBtn:active {
+            transform: scale(0.96);
+            box-shadow: 0 2px 10px rgba(0,212,170,0.2);
+        }
+
+        #startBtn.stop-state {
+            background: linear-gradient(135deg, var(--danger), #CC3846);
+            box-shadow: 0 4px 20px rgba(255,71,87,0.3);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 100px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            transition: all 0.3s;
+        }
+
+        .status-badge.active {
+            background: rgba(0,212,170,0.1);
+            border-color: rgba(0,212,170,0.3);
+            color: var(--primary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: 0.5;
+        }
+
+        .status-badge.active .status-dot {
+            opacity: 1;
+            box-shadow: 0 0 8px currentColor;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .toggle-btn {
+            padding: 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 14px;
+            background: rgba(255,255,255,0.03);
+            color: var(--text-dim);
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            position: relative;
+        }
+
+        .toggle-btn::before {
+            content: '';
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .toggle-btn[data-for="invert"]::before { content: '∿'; }
+        .toggle-btn[data-for="agc"]::before { content: '🛡'; }
+
+        .toggle-btn.on {
+            border-color: var(--primary);
+            background: rgba(0,212,170,0.1);
+            color: var(--primary);
+            box-shadow: 0 0 20px rgba(0,212,170,0.1);
+        }
+
+        .toggle-btn.on::before {
+            background: rgba(0,212,170,0.2);
+        }
+
+        .toggle-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .slider-block {
+            margin-top: 8px;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8125rem;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.1);
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,212,170,0.4);
+            border: 3px solid var(--surface);
+            transition: transform 0.1s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:active {
+            transform: scale(1.2);
+        }
+
+        .meter-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        canvas {
+            width: 100%;
+            height: 120px;
+            display: block;
+        }
+
+        .meter-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.6875rem;
+            color: var(--text-dim);
+            margin-top: 8px;
+            padding: 0 4px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.8125rem;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: var(--text-dim);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-value {
+            color: var(--text);
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .warning-banner {
+            background: rgba(255,165,2,0.1);
+            border: 1px solid rgba(255,165,2,0.3);
+            color: var(--warning);
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 0.8125rem;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+        }
+
+        .warning-banner.show {
+            display: flex;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .bluetooth-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-dim);
+            margin-left: 6px;
+        }
+
+        .bluetooth-indicator.active {
+            background: #0082FC;
+            box-shadow: 0 0 8px #0082FC;
+        }
+
+        footer {
+            text-align: center;
+            padding: 16px;
+            font-size: 0.6875rem;
+            color: var(--text-dim);
+            border-top: 1px solid var(--border);
+        }
+
+        @media (max-width: 360px) {
+            .control-grid { grid-template-columns: 1fr; }
+            h1 { font-size: 1.1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-mesh"></div>
+    
+    <header>
+        <h1>∿ Polarity Inverter Pro</h1>
+        <div class="subtitle">Real-time Phase Inversion & AGC</div>
+    </header>
+
+    <main>
+        <div class="card main-control">
+            <button id="startBtn">Start Monitoring</button>
+            <div class="status-badge" id="statusBadge">
+                <span class="status-dot"></span>
+                <span id="statusText">Ready</span>
+            </div>
+        </div>
+
+        <div id="feedbackWarning" class="warning-banner">
+            <span>⚠️</span>
+            <span>Feedback detected! Gain automatically reduced.</span>
+        </div>
+
+        <div class="card control-grid">
+            <button class="toggle-btn" id="invertBtn" data-for="invert" disabled>
+                <span>Invert Polarity</span>
+                <small style="font-size:0.75rem;opacity:0.7">OFF</small>
+            </button>
+            <button class="toggle-btn on" id="agcBtn" data-for="agc" disabled>
+                <span>AGC Guard</span>
+                <small style="font-size:0.75rem;opacity:0.7">ON</small>
+            </button>
+        </div>
+
+        <div class="card">
+            <div class="slider-block">
+                <div class="slider-header">
+                    <span>Output Volume</span>
+                    <span id="volValue">80%</span>
+                </div>
+                <input type="range" id="volumeSlider" min="0" max="150" value="80">
+            </div>
+            <div class="slider-block" style="margin-top:16px">
+                <div class="slider-header">
+                    <span>AGC Threshold</span>
+                    <span id="agcValue">-24 dB</span>
+                </div>
+                <input type="range" id="agcSlider" min="-50" max="-6" value="-24">
+            </div>
+        </div>
+
+        <div class="card meter-card">
+            <canvas id="audioMeter"></canvas>
+            <div class="meter-labels">
+                <span>-60dB</span>
+                <span>-30dB</span>
+                <span>-12dB</span>
+                <span>0dB</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="info-row">
+                <span class="info-label">
+                    Audio Output
+                    <span class="bluetooth-indicator" id="btIndicator"></span>
+                </span>
+                <span class="info-value" id="outputDevice">System Default</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Keep Awake</span>
+                <span class="info-value" id="wakeLockState">Inactive</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Input Channels</span>
+                <span class="info-value" id="channelCount">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Sample Rate</span>
+                <span class="info-value" id="sampleRate">-</span>
+            </div>
+        </div>
+
+        <div class="card" style="font-size:0.8125rem; color:var(--text-dim); line-height:1.6;">
+            <strong style="color:var(--text); display:block; margin-bottom:8px;">Tips for Mobile Background Use:</strong>
+            • Install this page to your home screen for better background audio persistence.<br>
+            • On Android, Bluetooth speakers are automatically routed via system settings.<br>
+            • If feedback occurs, AGC Guard will automatically duck the volume.<br>
+            • Keep screen on using the Wake Lock toggle in device settings.
+        </div>
+    </main>
+
+    <footer>
+        Local processing only • No audio leaves your device
+    </footer>
+
+    <script>
+        /**
+         * Polarity Inverter Pro - Audio Engine
+         * Handles real-time polarity inversion, AGC, and feedback suppression
+         */
+        class AudioEngine {
+            constructor() {
+                this.ctx = null;
+                this.stream = null;
+                this.source = null;
+                this.nodes = {};
+                this.isRunning = false;
+                this.isInverted = false;
+                this.agcEnabled = true;
+                this.masterVolume = 0.8;
+                this.agcThreshold = -24;
+                
+                // Feedback detection state
+                this.feedbackHistory = [];
+                this.isDucking = false;
+                this.duckTarget = 1.0;
+                this.currentDuck = 1.0;
+                this.guardFrame = 0;
+            }
+
+            async start() {
+                if (this.isRunning) return;
+                
+                // Initialize AudioContext with low latency
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContextClass({
+                    latencyHint: 'interactive',
+                    sampleRate: 48000 // Request standard rate, browser may override
+                });
+
+                // Resume if suspended (iOS Safari requirement)
+                if (this.ctx.state === 'suspended') {
+                    await this.ctx.resume();
+                }
+
+                // Acquire microphone with minimal processing to preserve direct signal
+                this.stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: false,      // Disable browser AGC for direct monitoring
+                        noiseSuppression: false,       // Keep signal clean
+                        autoGainControl: false,        // We handle gain ourselves
+                        channelCount: { ideal: 2 },    // Request stereo if available
+                        latency: 0.01,                 // Request low latency
+                        sampleRate: 48000
+                    }
+                });
+
+                const track = this.stream.getAudioTracks()[0];
+                const settings = track.getSettings();
+                
+                // Update UI with stream info
+                document.getElementById('channelCount').textContent = 
+                    settings.channelCount === 2 ? 'Stereo' : (settings.channelCount === 1 ? 'Mono' : (settings.channelCount || 'Unknown'));
+                document.getElementById('sampleRate').textContent = 
+                    (settings.sampleRate || this.ctx.sampleRate) + ' Hz';
+
+                // Build processing graph
+                this.buildGraph();
+                
+                // Start monitoring loop
+                this.isRunning = true;
+                this.monitorLoop();
+                
+                // Setup device change detection for Bluetooth
+                this.detectBluetooth();
+                navigator.mediaDevices?.addEventListener?.('devicechange', () => this.detectBluetooth());
+            }
+
+            buildGraph() {
+                const ctx = this.ctx;
+                
+                // Source from microphone
+                this.source = ctx.createMediaStreamSource(this.stream);
+                
+                // Input gain (unity, used for muting if needed)
+                this.nodes.inputGain = ctx.createGain();
+                this.nodes.inputGain.gain.value = 1.0;
+                
+                // High-pass filter to remove sub-bass feedback rumble
+                this.nodes.hpFilter = ctx.createBiquadFilter();
+                this.nodes.hpFilter.type = 'highpass';
+                this.nodes.hpFilter.frequency.value = 80;
+                this.nodes.hpFilter.Q.value = 0.7;
+                
+                // Polarity inverter: gain of -1 inverts phase, 1 is normal
+                this.nodes.inverter = ctx.createGain();
+                this.nodes.inverter.gain.value = 1.0;
+                
+                // AGC / Dynamics Compressor
+                // Provides automatic gain reduction to prevent runaway feedback
+                this.nodes.compressor = ctx.createDynamicsCompressor();
+                this.nodes.compressor.threshold.value = this.agcThreshold;
+                this.nodes.compressor.knee.value = 12;
+                this.nodes.compressor.ratio.value = 12;
+                this.nodes.compressor.attack.value = 0.003;   // 3ms attack
+                this.nodes.compressor.release.value = 0.1;    // 100ms release
+                
+                // Brickwall limiter as final safety
+                this.nodes.limiter = ctx.createDynamicsCompressor();
+                this.nodes.limiter.threshold.value = -1.0;    // Hard ceiling at -1dB
+                this.nodes.limiter.knee.value = 0;
+                this.nodes.limiter.ratio.value = 20;
+                this.nodes.limiter.attack.value = 0.001;
+                this.nodes.limiter.release.value = 0.05;
+                
+                // Master output gain (user controlled)
+                this.nodes.outputGain = ctx.createGain();
+                this.nodes.outputGain.gain.value = this.masterVolume;
+                
+                // Analyser for metering and feedback detection
+                this.nodes.analyser = ctx.createAnalyser();
+                this.nodes.analyser.fftSize = 2048;
+                this.nodes.analyser.smoothingTimeConstant = 0.8;
+                
+                // Connect graph
+                this.source
+                    .connect(this.nodes.inputGain)
+                    .connect(this.nodes.hpFilter)
+                    .connect(this.nodes.inverter)
+                    .connect(this.nodes.compressor)
+                    .connect(this.nodes.limiter)
+                    .connect(this.nodes.outputGain)
+                    .connect(this.nodes.analyser)
+                    .connect(ctx.destination);
+            }
+
+            toggleInvert(enabled) {
+                this.isInverted = enabled;
+                if (!this.nodes.inverter) return;
+                
+                const now = this.ctx.currentTime;
+                const target = enabled ? -1.0 : 1.0;
+                // Smooth ramp to avoid clicks
+                this.nodes.inverter.gain.setTargetAtTime(target, now, 0.02);
+            }
+
+            setVolume(percent) {
+                this.masterVolume = percent / 100;
+                if (this.nodes.outputGain) {
+                    this.nodes.outputGain.gain.setTargetAtTime(
+                        this.masterVolume * this.currentDuck, 
+                        this.ctx.currentTime, 
+                        0.05
+                    );
+                }
+            }
+
+            setAGCThreshold(db) {
+                this.agcThreshold = db;
+                if (this.nodes.compressor) {
+                    this.nodes.compressor.threshold.setTargetAtTime(db, this.ctx.currentTime, 0.1);
+                }
+            }
+
+            // Detect feedback oscillation and duck gain automatically
+            monitorLoop() {
+                if (!this.isRunning || !this.nodes.analyser) return;
+                
+                const analyser = this.nodes.analyser;
+                const bufferLength = analyser.fftSize;
+                const dataArray = new Float32Array(bufferLength);
+                analyser.getFloatTimeDomainData(dataArray);
+                
+                // Calculate RMS level
+                let sum = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    sum += dataArray[i] * dataArray[i];
+                }
+                const rms = Math.sqrt(sum / bufferLength);
+                const db = 20 * Math.log10(Math.max(rms, 1e-10));
+                
+                // Update visual meter via global visualizer
+                if (window.visualizer) {
+                    window.visualizer.draw(db, rms);
+                }
+                
+                // Feedback Guard Logic
+                if (this.agcEnabled && this.nodes.outputGain) {
+                    this.guardFrame++;
+                    
+                    // Track history for sustained high-level detection
+                    this.feedbackHistory.push(db);
+                    if (this.feedbackHistory.length > 10) this.feedbackHistory.shift();
+                    
+                    // Detect sustained high amplitude (> threshold for ~200ms)
+                    const sustainedHigh = this.feedbackHistory.every(d => d > this.agcThreshold - 6);
+                    const extremePeak = db > -6;  // Close to digital 0dBFS
+                    
+                    if ((sustainedHigh || extremePeak) && !this.isDucking) {
+                        this.isDucking = true;
+                        this.duckTarget = 0.05;  // Reduce to 5% volume
+                        this.showFeedbackWarning(true);
+                    } else if (db < this.agcThreshold - 12 && this.isDucking) {
+                        // Restore if level drops significantly below threshold
+                        this.isDucking = false;
+                        this.duckTarget = 1.0;
+                        this.showFeedbackWarning(false);
+                    }
+                    
+                    // Smooth ducking envelope (fast attack, slow release)
+                    const smoothFactor = this.isDucking ? 0.3 : 0.02;
+                    this.currentDuck += (this.duckTarget - this.currentDuck) * smoothFactor;
+                    
+                    const effectiveGain = this.masterVolume * this.currentDuck;
+                    // Only update every few frames to avoid audio glitches from excessive param updates
+                    if (this.guardFrame % 3 === 0) {
+                        this.nodes.outputGain.gain.setTargetAtTime(
+                            Math.max(effectiveGain, 0.001), 
+                            this.ctx.currentTime, 
+                            0.01
+                        );
+                    }
+                }
+                
+                requestAnimationFrame(() => this.monitorLoop());
+            }
+
+            showFeedbackWarning(show) {
+                const el = document.getElementById('feedbackWarning');
+                el.classList.toggle('show', show);
+            }
+
+            detectBluetooth() {
+                // Check if setSinkId is available (Chrome Android)
+                if (this.ctx && this.ctx.setSinkId) {
+                    navigator.mediaDevices.enumerateDevices().then(devices => {
+                        const audioOuts = devices.filter(d => d.kind === 'audiooutput');
+                        const bluetooth = audioOuts.find(d => d.label.toLowerCase().includes('bluetooth'));
+                        const btIndicator = document.getElementById('btIndicator');
+                        const btText = document.getElementById('outputDevice');
+                        
+                        if (bluetooth) {
+                            btIndicator.classList.add('active');
+                            btText.textContent = 'Bluetooth Active';
+                        } else {
+                            btIndicator.classList.remove('active');
+                            btText.textContent = 'System Default';
+                        }
+                    });
+                }
+            }
+
+            async stop() {
+                this.isRunning = false;
+                this.showFeedbackWarning(false);
+                
+                if (this.stream) {
+                    this.stream.getTracks().forEach(t => t.stop());
+                    this.stream = null;
+                }
+                if (this.source) {
+                    this.source.disconnect();
+                    this.source = null;
+                }
+                if (this.ctx) {
+                    await this.ctx.close();
+                    this.ctx = null;
+                }
+                this.nodes = {};
+                this.feedbackHistory = [];
+                this.currentDuck = 1.0;
+            }
+        }
+
+        /**
+         * WakeLock Manager - Prevents screen sleep during monitoring
+         */
+        class WakeLockManager {
+            constructor() {
+                this.lock = null;
+                this.supported = 'wakeLock' in navigator;
+            }
+
+            async request() {
+                if (!this.supported) return false;
+                try {
+                    this.lock = await navigator.wakeLock.request('screen');
+                    this.lock.addEventListener('release', () => {
+                        document.getElementById('wakeLockState').textContent = 'Inactive';
+                    });
+                    document.getElementById('wakeLockState').textContent = 'Active';
+                    return true;
+                } catch (e) {
+                    console.warn('WakeLock failed:', e);
+                    return false;
+                }
+            }
+
+            async release() {
+                if (this.lock) {
+                    await this.lock.release();
+                    this.lock = null;
+                }
+                document.getElementById('wakeLockState').textContent = 'Inactive';
+            }
+        }
+
+        /**
+         * Canvas Audio Meter Visualizer
+         */
+        class Visualizer {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+                
+                this.history = new Array(60).fill(-90);
+            }
+
+            resize() {
+                const rect = this.canvas.getBoundingClientRect();
+                this.canvas.width = rect.width * window.devicePixelRatio;
+                this.canvas.height = rect.height * window.devicePixelRatio;
+                this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+                this.width = rect.width;
+                this.height = rect.height;
+            }
+
+            draw(db, rms) {
+                // Update history
+                this.history.push(db);
+                this.history.shift();
+                
+                const ctx = this.ctx;
+                const w = this.width;
+                const h = this.height;
+                
+                ctx.clearRect(0, 0, w, h);
+                
+                // Draw gradient background bars
+                const barCount = 30;
+                const barWidth = (w - (barCount - 1) * 4) / barCount;
+                
+                for (let i = 0; i < barCount; i++) {
+                    const idx = Math.floor((i / barCount) * this.history.length);
+                    const val = this.history[idx];
+                    
+                    // Map dB (-60 to 0) to height
+                    const norm = Math.max(0, Math.min(1, (val + 60) / 60));
+                    const barH = norm * h * 0.9;
+                    const x = i * (barWidth + 4);
+                    const y = h - barH;
+                    
+                    // Color based on level
+                    let color;
+                    if (val > -6) color = 'rgba(255,71,87,0.9)';
+                    else if (val > -18) color = 'rgba(255,165,2,0.8)';
+                    else color = 'rgba(0,212,170,0.6)';
+                    
+                    // Rounded bar
+                    ctx.fillStyle = color;
+                    const radius = 3;
+                    ctx.beginPath();
+                    ctx.roundRect(x, y, barWidth, barH, [radius, radius, 0, 0]);
+                    ctx.fill();
+                    
+                    // Glow for high levels
+                    if (val > -12) {
+                        ctx.shadowColor = color;
+                        ctx.shadowBlur = 10;
+                        ctx.fill();
+                        ctx.shadowBlur = 0;
+                    }
+                }
+                
+                // Draw peak indicator line
+                const peakY = h - ((Math.max(...this.history) + 60) / 60) * h * 0.9;
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(0, peakY);
+                ctx.lineTo(w, peakY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        // Global instances
+        const audio = new AudioEngine();
+        const wakelock = new WakeLockManager();
+        window.visualizer = new Visualizer('audioMeter');
+
+        // DOM References
+        const startBtn = document.getElementById('startBtn');
+        const invertBtn = document.getElementById('invertBtn');
+        const agcBtn = document.getElementById('agcBtn');
+        const volSlider = document.getElementById('volumeSlider');
+        const agcSlider = document.getElementById('agcSlider');
+        const statusBadge = document.getElementById('statusBadge');
+        const statusText = document.getElementById('statusText');
+
+        // Event Handlers
+        startBtn.addEventListener('click', async () => {
+            if (!audio.isRunning) {
+                try {
+                    // Check HTTPS
+                    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                        alert('Microphone access requires HTTPS. Please serve this file over a secure connection.');
+                        return;
+                    }
+                    
+                    await audio.start();
+                    await wakelock.request();
+                    
+                    // Enable controls
+                    invertBtn.disabled = false;
+                    agcBtn.disabled = false;
+                    
+                    // Update UI
+                    startBtn.textContent = 'Stop Monitoring';
+                    startBtn.classList.add('stop-state');
+                    statusBadge.classList.add('active');
+                    statusText.textContent = 'Live • Processing';
+                    
+                    // Handle visibility changes for background operation
+                    document.addEventListener('visibilitychange', handleVisibility);
+                    
+                } catch (err) {
+                    console.error('Audio start failed:', err);
+                    alert('Could not start audio: ' + (err.message || err.name) + '\n\nEnsure microphone permission is granted.');
+                }
+            } else {
+                await audio.stop();
+                await wakelock.release();
+                
+                invertBtn.disabled = true;
+                agcBtn.disabled = true;
+                
+                startBtn.textContent = 'Start Monitoring';
+                startBtn.classList.remove('stop-state');
+                statusBadge.classList.remove('active');
+                statusText.textContent = 'Ready';
+                
+                document.removeEventListener('visibilitychange', handleVisibility);
+            }
+        });
+
+        invertBtn.addEventListener('click', () => {
+            const isOn = !invertBtn.classList.contains('on');
+            invertBtn.classList.toggle('on');
+            invertBtn.querySelector('small').textContent = isOn ? 'ON' : 'OFF';
+            audio.toggleInvert(isOn);
+        });
+
+        agcBtn.addEventListener('click', () => {
+            const isOn = !agcBtn.classList.contains('on');
+            agcBtn.classList.toggle('on');
+            agcBtn.querySelector('small').textContent = isOn ? 'ON' : 'OFF';
+            audio.agcEnabled = isOn;
+        });
+
+        volSlider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            document.getElementById('volValue').textContent = val + '%';
+            audio.setVolume(val);
+        });
+
+        agcSlider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            document.getElementById('agcValue').textContent = val + ' dB';
+            audio.setAGCThreshold(parseFloat(val));
+        });
+
+        // Keep audio alive when app goes to background
+        async function handleVisibility() {
+            if (document.hidden && audio.ctx && audio.ctx.state === 'suspended') {
+                await audio.ctx.resume();
+            }
+            if (!document.hidden && audio.ctx && audio.ctx.state === 'suspended') {
+                await audio.ctx.resume();
+            }
+        }
+
+        // iOS Safari: keep audio context alive on touch
+        document.addEventListener('touchstart', async () => {
+            if (audio.ctx && audio.ctx.state === 'suspended') {
+                await audio.ctx.resume();
+            }
+        }, { passive: true });
+
+        // Prevent sleep on some devices via NoSleep fallback logic (audio trick)
+        let noSleepAudio = null;
+        function enableNoSleep() {
+            if (!audio.ctx) return;
+            // Create silent oscillator to keep audio thread alive in background on some browsers
+            noSleepAudio = audio.ctx.createOscillator();
+            const gain = audio.ctx.createGain();
+            gain.gain.value = 0; // Silent
+            noSleepAudio.connect(gain);
+            gain.connect(audio.ctx.destination);
+            noSleepAudio.start();
+        }
+
+        // Expose for debugging
+        window.audioEngine = audio;
+    </script>
+</body>
+</html>
