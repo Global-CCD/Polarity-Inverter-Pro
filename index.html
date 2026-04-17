@@ -43,7 +43,6 @@
             flex-direction: column;
         }
 
-        /* Animated background mesh */
         .bg-mesh {
             position: fixed;
             inset: 0;
@@ -377,6 +376,27 @@
             border-top: 1px solid var(--border);
         }
 
+        .offline-badge {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            padding: 4px 10px;
+            border-radius: 100px;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--primary);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 100;
+        }
+
+        .offline-badge.show {
+            opacity: 1;
+        }
+
         @media (max-width: 360px) {
             .control-grid { grid-template-columns: 1fr; }
             h1 { font-size: 1.1rem; }
@@ -385,6 +405,7 @@
 </head>
 <body>
     <div class="bg-mesh"></div>
+    <div class="offline-badge" id="offlineBadge">● Offline Ready</div>
     
     <header>
         <h1>∿ Polarity Inverter Pro</h1>
@@ -466,11 +487,12 @@
         </div>
 
         <div class="card" style="font-size:0.8125rem; color:var(--text-dim); line-height:1.6;">
-            <strong style="color:var(--text); display:block; margin-bottom:8px;">Tips for Mobile Background Use:</strong>
-            • Install this page to your home screen for better background audio persistence.<br>
-            • On Android, Bluetooth speakers are automatically routed via system settings.<br>
-            • If feedback occurs, AGC Guard will automatically duck the volume.<br>
-            • Keep screen on using the Wake Lock toggle in device settings.
+            <strong style="color:var(--text); display:block; margin-bottom:8px;">Android Background Tips:</strong>
+            • Install to Home Screen for best background persistence.<br>
+            • Pair Bluetooth speaker <em>before</em> starting; audio follows system routing.<br>
+            • AGC Guard auto-ducks volume if mic/speaker feedback occurs.<br>
+            • Media Session notification appears when active—don't swipe it away.<br>
+            • If audio stops on lock screen, ensure Chrome is allowed to run in background (Battery settings).
         </div>
     </main>
 
@@ -480,9 +502,54 @@
 
     <script>
         /**
-         * Polarity Inverter Pro - Audio Engine
-         * Handles real-time polarity inversion, AGC, and feedback suppression
+         * ANDROID OFFLINE & BACKGROUND STRATEGY
+         * 
+         * 1. Service Worker (inline Blob): Caches the single HTML file for full offline use.
+         * 2. Media Session API: Creates a persistent notification with playback state, 
+         *    telling Android this is a media app that should not be suspended.
+         * 3. Silent Oscillator: Keeps AudioContext "active" preventing Chrome from 
+         *    pausing the audio thread when the tab is backgrounded.
+         * 4. Page Lifecycle: Hooks pagehide/pageshow/freeze to aggressively resume 
+         *    audio contexts when returning from the background.
          */
+
+        // ─── INLINE SERVICE WORKER FOR OFFLINE ───
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                const CACHE_NAME = 'polarity-inverter-v1';
+                const URLS_TO_CACHE = [self.location.pathname];
+                
+                self.addEventListener('install', e => {
+                    e.waitUntil(
+                        caches.open(CACHE_NAME).then(cache => cache.addAll(URLS_TO_CACHE))
+                    );
+                    self.skipWaiting();
+                });
+                
+                self.addEventListener('activate', e => {
+                    e.waitUntil(self.clients.claim());
+                });
+                
+                self.addEventListener('fetch', e => {
+                    e.respondWith(
+                        caches.match(e.request).then(response => {
+                            return response || fetch(e.request);
+                        }).catch(() => caches.match(self.location.pathname))
+                    );
+                });
+            `;
+            const swBlob = new Blob([swCode], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(swBlob);
+            
+            navigator.serviceWorker.register(swUrl)
+                .then(() => {
+                    document.getElementById('offlineBadge').classList.add('show');
+                    setTimeout(() => document.getElementById('offlineBadge').classList.remove('show'), 3000);
+                })
+                .catch(err => console.warn('SW registration failed:', err));
+        }
+
+        // ─── AUDIO ENGINE ───
         class AudioEngine {
             constructor() {
                 this.ctx = null;
@@ -495,37 +562,32 @@
                 this.masterVolume = 0.8;
                 this.agcThreshold = -24;
                 
-                // Feedback detection state
                 this.feedbackHistory = [];
                 this.isDucking = false;
                 this.duckTarget = 1.0;
                 this.currentDuck = 1.0;
                 this.guardFrame = 0;
+                this.silentOsc = null;
             }
 
             async start() {
                 if (this.isRunning) return;
-                
-                // Initialize AudioContext with low latency
+
                 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
                 this.ctx = new AudioContextClass({
                     latencyHint: 'interactive',
-                    sampleRate: 48000 // Request standard rate, browser may override
+                    sampleRate: 48000
                 });
 
-                // Resume if suspended (iOS Safari requirement)
-                if (this.ctx.state === 'suspended') {
-                    await this.ctx.resume();
-                }
+                if (this.ctx.state === 'suspended') await this.ctx.resume();
 
-                // Acquire microphone with minimal processing to preserve direct signal
                 this.stream = await navigator.mediaDevices.getUserMedia({
                     audio: {
-                        echoCancellation: false,      // Disable browser AGC for direct monitoring
-                        noiseSuppression: false,       // Keep signal clean
-                        autoGainControl: false,        // We handle gain ourselves
-                        channelCount: { ideal: 2 },    // Request stereo if available
-                        latency: 0.01,                 // Request low latency
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false,
+                        channelCount: { ideal: 2 },
+                        latency: 0.01,
                         sampleRate: 48000
                     }
                 });
@@ -533,71 +595,77 @@
                 const track = this.stream.getAudioTracks()[0];
                 const settings = track.getSettings();
                 
-                // Update UI with stream info
                 document.getElementById('channelCount').textContent = 
                     settings.channelCount === 2 ? 'Stereo' : (settings.channelCount === 1 ? 'Mono' : (settings.channelCount || 'Unknown'));
                 document.getElementById('sampleRate').textContent = 
                     (settings.sampleRate || this.ctx.sampleRate) + ' Hz';
 
-                // Build processing graph
                 this.buildGraph();
-                
-                // Start monitoring loop
+                this.startSilentHeartbeat();   // Android: keep audio thread alive
+                this.setupMediaSession();      // Android: persistent notification
                 this.isRunning = true;
                 this.monitorLoop();
-                
-                // Setup device change detection for Bluetooth
                 this.detectBluetooth();
-                navigator.mediaDevices?.addEventListener?.('devicechange', () => this.detectBluetooth());
+                
+                if (navigator.mediaDevices?.addEventListener) {
+                    navigator.mediaDevices.addEventListener('devicechange', () => this.detectBluetooth());
+                }
+
+                // Aggressive resume hooks for Android background transitions
+                const resumeCtx = () => { 
+                    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(()=>{}); 
+                };
+                document.addEventListener('visibilitychange', resumeCtx);
+                window.addEventListener('pagehide', resumeCtx);
+                window.addEventListener('pageshow', resumeCtx);
+                window.addEventListener('focus', resumeCtx);
+                if ('onfreeze' in document) {
+                    document.addEventListener('freeze', resumeCtx);
+                    document.addEventListener('resume', resumeCtx);
+                }
+                
+                // Auto-resume if state changes externally
+                this.ctx.onstatechange = () => {
+                    if (this.ctx.state === 'suspended') this.ctx.resume().catch(()=>{});
+                };
             }
 
             buildGraph() {
                 const ctx = this.ctx;
-                
-                // Source from microphone
                 this.source = ctx.createMediaStreamSource(this.stream);
                 
-                // Input gain (unity, used for muting if needed)
                 this.nodes.inputGain = ctx.createGain();
                 this.nodes.inputGain.gain.value = 1.0;
                 
-                // High-pass filter to remove sub-bass feedback rumble
                 this.nodes.hpFilter = ctx.createBiquadFilter();
                 this.nodes.hpFilter.type = 'highpass';
                 this.nodes.hpFilter.frequency.value = 80;
                 this.nodes.hpFilter.Q.value = 0.7;
                 
-                // Polarity inverter: gain of -1 inverts phase, 1 is normal
                 this.nodes.inverter = ctx.createGain();
                 this.nodes.inverter.gain.value = 1.0;
                 
-                // AGC / Dynamics Compressor
-                // Provides automatic gain reduction to prevent runaway feedback
                 this.nodes.compressor = ctx.createDynamicsCompressor();
                 this.nodes.compressor.threshold.value = this.agcThreshold;
                 this.nodes.compressor.knee.value = 12;
                 this.nodes.compressor.ratio.value = 12;
-                this.nodes.compressor.attack.value = 0.003;   // 3ms attack
-                this.nodes.compressor.release.value = 0.1;    // 100ms release
+                this.nodes.compressor.attack.value = 0.003;
+                this.nodes.compressor.release.value = 0.1;
                 
-                // Brickwall limiter as final safety
                 this.nodes.limiter = ctx.createDynamicsCompressor();
-                this.nodes.limiter.threshold.value = -1.0;    // Hard ceiling at -1dB
+                this.nodes.limiter.threshold.value = -1.0;
                 this.nodes.limiter.knee.value = 0;
                 this.nodes.limiter.ratio.value = 20;
                 this.nodes.limiter.attack.value = 0.001;
                 this.nodes.limiter.release.value = 0.05;
                 
-                // Master output gain (user controlled)
                 this.nodes.outputGain = ctx.createGain();
                 this.nodes.outputGain.gain.value = this.masterVolume;
                 
-                // Analyser for metering and feedback detection
                 this.nodes.analyser = ctx.createAnalyser();
                 this.nodes.analyser.fftSize = 2048;
                 this.nodes.analyser.smoothingTimeConstant = 0.8;
                 
-                // Connect graph
                 this.source
                     .connect(this.nodes.inputGain)
                     .connect(this.nodes.hpFilter)
@@ -609,13 +677,46 @@
                     .connect(ctx.destination);
             }
 
+            startSilentHeartbeat() {
+                // Android Chrome keeps background audio alive if an oscillator is running.
+                // This silent tone keeps the audio thread marked "active" preventing suspension.
+                if (!this.ctx) return;
+                this.silentOsc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                gain.gain.value = 0; // completely silent
+                this.silentOsc.connect(gain);
+                gain.connect(this.ctx.destination);
+                this.silentOsc.start();
+            }
+
+            setupMediaSession() {
+                // Media Session API creates a foreground-service-like notification on Android,
+                // giving the app media priority and preventing the system from killing it.
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: 'Polarity Inverter Pro',
+                        artist: 'Live Monitoring Active',
+                        album: 'Local Audio Processing',
+                        artwork: [
+                            { src: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect fill="%230B0F19" width="512" height="512"/><text x="256" y="320" font-size="240" text-anchor="middle" fill="%2300D4AA">∿</text></svg>', sizes: '512x512', type: 'image/svg+xml' }
+                        ]
+                    });
+                    
+                    navigator.mediaSession.setActionHandler('play', () => {});
+                    navigator.mediaSession.setActionHandler('pause', () => {});
+                    navigator.mediaSession.setActionHandler('stop', () => {
+                        window.dispatchEvent(new Event('stop-monitoring'));
+                    });
+                    
+                    navigator.mediaSession.playbackState = 'playing';
+                }
+            }
+
             toggleInvert(enabled) {
                 this.isInverted = enabled;
                 if (!this.nodes.inverter) return;
-                
                 const now = this.ctx.currentTime;
                 const target = enabled ? -1.0 : 1.0;
-                // Smooth ramp to avoid clicks
                 this.nodes.inverter.gain.setTargetAtTime(target, now, 0.02);
             }
 
@@ -637,7 +738,6 @@
                 }
             }
 
-            // Detect feedback oscillation and duck gain automatically
             monitorLoop() {
                 if (!this.isRunning || !this.nodes.analyser) return;
                 
@@ -646,7 +746,6 @@
                 const dataArray = new Float32Array(bufferLength);
                 analyser.getFloatTimeDomainData(dataArray);
                 
-                // Calculate RMS level
                 let sum = 0;
                 for (let i = 0; i < bufferLength; i++) {
                     sum += dataArray[i] * dataArray[i];
@@ -654,40 +753,30 @@
                 const rms = Math.sqrt(sum / bufferLength);
                 const db = 20 * Math.log10(Math.max(rms, 1e-10));
                 
-                // Update visual meter via global visualizer
-                if (window.visualizer) {
-                    window.visualizer.draw(db, rms);
-                }
+                if (window.visualizer) window.visualizer.draw(db, rms);
                 
-                // Feedback Guard Logic
                 if (this.agcEnabled && this.nodes.outputGain) {
                     this.guardFrame++;
-                    
-                    // Track history for sustained high-level detection
                     this.feedbackHistory.push(db);
                     if (this.feedbackHistory.length > 10) this.feedbackHistory.shift();
                     
-                    // Detect sustained high amplitude (> threshold for ~200ms)
                     const sustainedHigh = this.feedbackHistory.every(d => d > this.agcThreshold - 6);
-                    const extremePeak = db > -6;  // Close to digital 0dBFS
+                    const extremePeak = db > -6;
                     
                     if ((sustainedHigh || extremePeak) && !this.isDucking) {
                         this.isDucking = true;
-                        this.duckTarget = 0.05;  // Reduce to 5% volume
+                        this.duckTarget = 0.05;
                         this.showFeedbackWarning(true);
                     } else if (db < this.agcThreshold - 12 && this.isDucking) {
-                        // Restore if level drops significantly below threshold
                         this.isDucking = false;
                         this.duckTarget = 1.0;
                         this.showFeedbackWarning(false);
                     }
                     
-                    // Smooth ducking envelope (fast attack, slow release)
                     const smoothFactor = this.isDucking ? 0.3 : 0.02;
                     this.currentDuck += (this.duckTarget - this.currentDuck) * smoothFactor;
                     
                     const effectiveGain = this.masterVolume * this.currentDuck;
-                    // Only update every few frames to avoid audio glitches from excessive param updates
                     if (this.guardFrame % 3 === 0) {
                         this.nodes.outputGain.gain.setTargetAtTime(
                             Math.max(effectiveGain, 0.001), 
@@ -701,26 +790,16 @@
             }
 
             showFeedbackWarning(show) {
-                const el = document.getElementById('feedbackWarning');
-                el.classList.toggle('show', show);
+                document.getElementById('feedbackWarning').classList.toggle('show', show);
             }
 
             detectBluetooth() {
-                // Check if setSinkId is available (Chrome Android)
                 if (this.ctx && this.ctx.setSinkId) {
                     navigator.mediaDevices.enumerateDevices().then(devices => {
                         const audioOuts = devices.filter(d => d.kind === 'audiooutput');
                         const bluetooth = audioOuts.find(d => d.label.toLowerCase().includes('bluetooth'));
-                        const btIndicator = document.getElementById('btIndicator');
-                        const btText = document.getElementById('outputDevice');
-                        
-                        if (bluetooth) {
-                            btIndicator.classList.add('active');
-                            btText.textContent = 'Bluetooth Active';
-                        } else {
-                            btIndicator.classList.remove('active');
-                            btText.textContent = 'System Default';
-                        }
+                        document.getElementById('btIndicator').classList.toggle('active', !!bluetooth);
+                        document.getElementById('outputDevice').textContent = bluetooth ? 'Bluetooth Active' : 'System Default';
                     });
                 }
             }
@@ -728,6 +807,16 @@
             async stop() {
                 this.isRunning = false;
                 this.showFeedbackWarning(false);
+                
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.playbackState = 'none';
+                    navigator.mediaSession.metadata = null;
+                }
+                
+                if (this.silentOsc) {
+                    try { this.silentOsc.stop(); } catch(e){}
+                    this.silentOsc = null;
+                }
                 
                 if (this.stream) {
                     this.stream.getTracks().forEach(t => t.stop());
@@ -747,9 +836,7 @@
             }
         }
 
-        /**
-         * WakeLock Manager - Prevents screen sleep during monitoring
-         */
+        // ─── WAKE LOCK ───
         class WakeLockManager {
             constructor() {
                 this.lock = null;
@@ -762,11 +849,12 @@
                     this.lock = await navigator.wakeLock.request('screen');
                     this.lock.addEventListener('release', () => {
                         document.getElementById('wakeLockState').textContent = 'Inactive';
+                        // Auto-re-acquire if still running (Android sometimes releases on screen-off)
+                        if (audio.isRunning) setTimeout(() => this.request(), 1000);
                     });
                     document.getElementById('wakeLockState').textContent = 'Active';
                     return true;
                 } catch (e) {
-                    console.warn('WakeLock failed:', e);
                     return false;
                 }
             }
@@ -780,16 +868,13 @@
             }
         }
 
-        /**
-         * Canvas Audio Meter Visualizer
-         */
+        // ─── VISUALIZER ───
         class Visualizer {
             constructor(canvasId) {
                 this.canvas = document.getElementById(canvasId);
                 this.ctx = this.canvas.getContext('2d');
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
-                
                 this.history = new Array(60).fill(-90);
             }
 
@@ -803,7 +888,6 @@
             }
 
             draw(db, rms) {
-                // Update history
                 this.history.push(db);
                 this.history.shift();
                 
@@ -813,34 +897,27 @@
                 
                 ctx.clearRect(0, 0, w, h);
                 
-                // Draw gradient background bars
                 const barCount = 30;
                 const barWidth = (w - (barCount - 1) * 4) / barCount;
                 
                 for (let i = 0; i < barCount; i++) {
                     const idx = Math.floor((i / barCount) * this.history.length);
                     const val = this.history[idx];
-                    
-                    // Map dB (-60 to 0) to height
                     const norm = Math.max(0, Math.min(1, (val + 60) / 60));
                     const barH = norm * h * 0.9;
                     const x = i * (barWidth + 4);
                     const y = h - barH;
                     
-                    // Color based on level
                     let color;
                     if (val > -6) color = 'rgba(255,71,87,0.9)';
                     else if (val > -18) color = 'rgba(255,165,2,0.8)';
                     else color = 'rgba(0,212,170,0.6)';
                     
-                    // Rounded bar
                     ctx.fillStyle = color;
-                    const radius = 3;
                     ctx.beginPath();
-                    ctx.roundRect(x, y, barWidth, barH, [radius, radius, 0, 0]);
+                    ctx.roundRect(x, y, barWidth, barH, [3, 3, 0, 0]);
                     ctx.fill();
                     
-                    // Glow for high levels
                     if (val > -12) {
                         ctx.shadowColor = color;
                         ctx.shadowBlur = 10;
@@ -849,7 +926,6 @@
                     }
                 }
                 
-                // Draw peak indicator line
                 const peakY = h - ((Math.max(...this.history) + 60) / 60) * h * 0.9;
                 ctx.strokeStyle = 'rgba(255,255,255,0.3)';
                 ctx.setLineDash([4, 4]);
@@ -861,12 +937,11 @@
             }
         }
 
-        // Global instances
+        // ─── APP INITIALIZATION ───
         const audio = new AudioEngine();
         const wakelock = new WakeLockManager();
         window.visualizer = new Visualizer('audioMeter');
 
-        // DOM References
         const startBtn = document.getElementById('startBtn');
         const invertBtn = document.getElementById('invertBtn');
         const agcBtn = document.getElementById('agcBtn');
@@ -875,35 +950,28 @@
         const statusBadge = document.getElementById('statusBadge');
         const statusText = document.getElementById('statusText');
 
-        // Event Handlers
         startBtn.addEventListener('click', async () => {
             if (!audio.isRunning) {
                 try {
-                    // Check HTTPS
                     if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                        alert('Microphone access requires HTTPS. Please serve this file over a secure connection.');
+                        alert('Microphone access requires HTTPS.');
                         return;
                     }
                     
                     await audio.start();
                     await wakelock.request();
                     
-                    // Enable controls
                     invertBtn.disabled = false;
                     agcBtn.disabled = false;
                     
-                    // Update UI
                     startBtn.textContent = 'Stop Monitoring';
                     startBtn.classList.add('stop-state');
                     statusBadge.classList.add('active');
                     statusText.textContent = 'Live • Processing';
                     
-                    // Handle visibility changes for background operation
-                    document.addEventListener('visibilitychange', handleVisibility);
-                    
                 } catch (err) {
-                    console.error('Audio start failed:', err);
-                    alert('Could not start audio: ' + (err.message || err.name) + '\n\nEnsure microphone permission is granted.');
+                    console.error(err);
+                    alert('Could not start audio: ' + (err.message || err.name));
                 }
             } else {
                 await audio.stop();
@@ -916,9 +984,12 @@
                 startBtn.classList.remove('stop-state');
                 statusBadge.classList.remove('active');
                 statusText.textContent = 'Ready';
-                
-                document.removeEventListener('visibilitychange', handleVisibility);
             }
+        });
+
+        // External stop handler (e.g. Media Session stop button)
+        window.addEventListener('stop-monitoring', () => {
+            if (audio.isRunning) startBtn.click();
         });
 
         invertBtn.addEventListener('click', () => {
@@ -947,37 +1018,13 @@
             audio.setAGCThreshold(parseFloat(val));
         });
 
-        // Keep audio alive when app goes to background
-        async function handleVisibility() {
-            if (document.hidden && audio.ctx && audio.ctx.state === 'suspended') {
-                await audio.ctx.resume();
-            }
-            if (!document.hidden && audio.ctx && audio.ctx.state === 'suspended') {
-                await audio.ctx.resume();
-            }
-        }
-
-        // iOS Safari: keep audio context alive on touch
+        // iOS Safari audio unlock
         document.addEventListener('touchstart', async () => {
             if (audio.ctx && audio.ctx.state === 'suspended') {
                 await audio.ctx.resume();
             }
         }, { passive: true });
 
-        // Prevent sleep on some devices via NoSleep fallback logic (audio trick)
-        let noSleepAudio = null;
-        function enableNoSleep() {
-            if (!audio.ctx) return;
-            // Create silent oscillator to keep audio thread alive in background on some browsers
-            noSleepAudio = audio.ctx.createOscillator();
-            const gain = audio.ctx.createGain();
-            gain.gain.value = 0; // Silent
-            noSleepAudio.connect(gain);
-            gain.connect(audio.ctx.destination);
-            noSleepAudio.start();
-        }
-
-        // Expose for debugging
         window.audioEngine = audio;
     </script>
 </body>
